@@ -5,22 +5,17 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
 
 	helper "./helper"
 	dbms "./mysql"
 )
 
 const (
-	MYSQL = "192.168.1.110:3306"
-	PROXY = "192.168.1.100:3306"
+	MYSQL = "192.168.1.55:3306"
+	PROXY = "192.168.1.48:3306" // THIS SERVER
 )
 
 func main() {
-
-	testFunc()
-
-	os.Exit(3)
 
 	proxyListener, err := net.Listen("tcp", PROXY)
 	if err != nil {
@@ -61,32 +56,20 @@ func handleConnection(conn net.Conn) {
 
 	// copy traffic form conn_client to mysql_server
 	appToMysql(conn, mysql)
-
-	// implement method to get query
-
-	// implement method to get 'mysql' object coming from real server
-
-	//io.Copy(mysql, conn)
 }
 
-func appToMysql(app net.Conn, mysql net.Conn) {
+func appToMysql(client net.Conn, mysql net.Conn) {
 	for {
-
-		pkt, err := dbms.ProxyPacket(app, mysql)
+		_, err := dbms.ProxyPacket(client, mysql)
 		if err != nil {
+			dbms.Clean()
 			break
-		}
-
-		if query, err := dbms.GetQueryString(pkt); err == nil {
-			fmt.Println("Query --> ", query)
 		}
 	}
 }
 
 func testFunc() {
-	//query := "select * from persons where id=45 and value>125"
-	query2 := 3
-	//packet := helper.EncodeStringInBytes(query)
-	packet2 := helper.EncodeIntInBytes(query2)
-	fmt.Println(packet2)
+	query := "DROP DATABASE okidb"
+	packet := helper.StringToBytes(query)
+	fmt.Println(packet)
 }
