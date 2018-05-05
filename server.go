@@ -2,31 +2,32 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
 
 	helper "./helper"
 	dbms "./mysql"
 )
-
+/*
+SHA1( password ) XOR SHA1( "20-bytes random data from server" <concat> SHA1( SHA1( password ) ) )
+*/
 const (
-	MYSQL = "192.168.1.55:3306"
-	PROXY = "192.168.1.48:3306" // THIS SERVER
+	MYSQL = "192.168.1.115:3306"	// MaxScale
+	PROXY = "192.168.1.100:3306" // THIS SERVER
 )
 
 func main() {
 
-	proxyListener, err := net.Listen("tcp", PROXY)
+	listener, err := net.Listen("tcp", PROXY)
 	if err != nil {
 		log.Fatalf("%s: %s", "ERROR", err.Error())
 	}
-	defer proxyListener.Close()
+	defer listener.Close()
 
 	fmt.Println("Proxy started at : ", PROXY)
 
 	for {
-		conn, err := proxyListener.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("%s: %s", "ERROR", err.Error())
 		}
@@ -38,6 +39,7 @@ func main() {
 }
 
 func handleConnection(conn net.Conn) {
+	// fermer la connexion à la fin
 	defer conn.Close()
 
 	// connect MySQL server
@@ -52,15 +54,34 @@ func handleConnection(conn net.Conn) {
 	// ***** INIT CONNECION *****
 	// copy traffic from 'mysql' to 'conn' -> client
 	// -> because of mysqlProto which needs mysql sends 'Greeting' packet first, after what clients responds with login/passwd hashed
-	go io.Copy(conn, mysql)
+	//go io.Copy(conn, mysql)
+	go MysqlToApp(mysql, conn)
 
 	// copy traffic form conn_client to mysql_server
 	appToMysql(conn, mysql)
+
+	// do smth like
+	/*
+		if(appToMysql && MysqlToApp){
+			continue
+		}
+	*/
 }
 
 func appToMysql(client net.Conn, mysql net.Conn) {
 	for {
-		_, err := dbms.ProxyPacket(client, mysql)
+		err := dbms.ProxyPacket(client, mysql)
+		if err != nil {
+			dbms.Clean()
+			break
+		}
+	}
+	// send signal --> proxying done
+}
+
+func MysqlToApp(mysql net.Conn, client net.Conn) {
+	for {
+		err := dbms.ProxyPacket(mysql, client)
 		if err != nil {
 			dbms.Clean()
 			break
