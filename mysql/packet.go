@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 )
 
 const (
 	// client
-	OK_Packet	= 0
-	COM_QUIT  	= 1	
+	OK_Packet   = 0
+	COM_QUIT    = 1
 	COM_INIT_DB = 2
-	COM_QUERY 	= 3
+	COM_QUERY   = 3
 	// server
-	OK_Pack 	= 254	
-	ERR_Packet 	= 255
+	OK_Pack    = 254
+	ERR_Packet = 255
 )
 
 var counter = 1
@@ -31,44 +32,89 @@ func ProxyPacket(src, dst net.Conn) error {
 		return err
 	}
 
-	addr := src.RemoteAddr().String()
-	if addr == "192.168.1.115:3306" { 		// mysql server
-		fmt.Println(addr, " mysql: ", counter)
-		fmt.Println(string(pkt))
-		fmt.Println(pkt)
-		counter++
-	} else { 								// client
-		fmt.Println(addr, " client: ", counter)
-		fmt.Println(string(pkt))
-		fmt.Println(pkt)
-		counter++
-	}
-	fmt.Println("------------------------------------------------------------------------------------")
-
+	// see packets
 	/*
-	// check if packet is querry
-	if query, err := GetQueryString(pkt); err == nil {
-		// lauch scan
-		// if normal --> manage
-		// *	*	*	*	get information if select/insert/update/delete
-		// *	*	*	*	if select do nothing
-		// *	*	*	*	if insert/update/delete --> see crem
-		// if custom --> manage
-		// *	*	*	*	only select here !!!
-		// *	*	*	*	get info after ***
-		// *	*	*	*	create second part of querry
-		// *	*	*	*	create first part of querry, and append()
-		// *	*	*	*	close connection to mysql
-		// *	*	*	*	open connection to columnStore
-		// *	*	*	*	get data & transmit them
-		// *	*	*	*	return !
-		fmt.Println("Query --> ", query)
-	}
+		addr := src.RemoteAddr().String()
+		if addr == "192.168.1.115:3306" { 		// mysql server
+			fmt.Println(addr, " mysql: ", counter)
+			fmt.Println(string(pkt))
+			fmt.Println(pkt)
+			counter++
+		} else { 								// client
+			fmt.Println(addr, " client: ", counter)
+			fmt.Println(string(pkt))
+			fmt.Println(pkt)
+			counter++
+		}
+		fmt.Println("------------------------------------------------------------------------------------")
 	*/
 
-	_, err = WritePacket(pkt, dst)
-	if err != nil {
-		return err
+	IsQueryNormal := true // flag
+	// check if packet is querry
+	if query, err := GetQueryString(pkt); err == nil {
+
+		typeStr := query[0:7]
+		queryType := GetQueryType(typeStr)
+		fmt.Println(queryType)
+
+		switch queryType {
+		case "select":
+			// check if custom or not
+			if strings.Contains(query, "HISTORY") {
+				IsQueryNormal = false
+				// manage connection
+				// rework query
+				// how to --> ask crem
+				// open connection to HA Cluster
+				// send query
+				// catch data & send them to client.conn
+
+			} else {
+				// if normal select
+
+			}
+
+			break
+		case "insert":
+			// copy query
+			// go PerformInsertQuery(query)
+			// work query to send to HA Cluster
+			// open conn & send
+
+			break
+		case "update":
+			// copy query
+			// go PerformUpdateQuery(query)
+			// work query to send to HA Cluster
+			// open conn & send
+
+			break
+		case "delete":
+			// copy query
+			// go PerformDeleteQuery(query)
+			// work query to send to HA Cluster
+			// open conn & send
+
+			break
+		default:
+			break
+		}
+		/*
+			var b strings.Builder
+			b.String()
+			s := strings.Split("127.0.0.1:5432", ":")
+			ip, port := s[0], s[1]
+			strings.Contains("seafood", "foo")
+
+			fmt.Println("Query --> ", query)
+		*/
+	}
+
+	if IsQueryNormal {
+		_, err = WritePacket(pkt, dst)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -124,6 +170,23 @@ func GetQueryString(pkt []byte) (string, error) {
 	}
 
 	return "", ErrNoQueryPacket
+}
+
+func GetQueryType(query string) string {
+	s := strings.ToLower(query)
+	if strings.Contains(s, "select") {
+		return "select"
+	}
+	if strings.Contains(s, "delete") {
+		return "delete"
+	}
+	if strings.Contains(s, "insert") {
+		return "insert"
+	}
+	if strings.Contains(s, "update") {
+		return "update"
+	}
+	return ""
 }
 
 func Clean() {
