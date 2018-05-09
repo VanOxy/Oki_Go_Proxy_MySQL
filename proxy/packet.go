@@ -1,8 +1,7 @@
-package mysql
+package proxy
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -52,10 +51,9 @@ func ProxyPacket(src, dst net.Conn) error {
 	IsQueryNormal := true // flag
 	// check if packet is querry
 	if query, err := GetQueryString(pkt); err == nil {
-
+		// get first 7 chars from query
 		typeStr := query[0:7]
 		queryType := GetQueryType(typeStr)
-		fmt.Println(queryType)
 
 		switch queryType {
 		case "select":
@@ -69,15 +67,10 @@ func ProxyPacket(src, dst net.Conn) error {
 				// send query
 				// catch data & send them to client.conn
 
-			} else {
-				// if normal select
-
 			}
-
 			break
 		case "insert":
-			// copy query
-			// go PerformInsertQuery(query)
+			go PerformInsertQuery(query)
 			// work query to send to HA Cluster
 			// open conn & send
 
@@ -99,15 +92,6 @@ func ProxyPacket(src, dst net.Conn) error {
 		default:
 			break
 		}
-		/*
-			var b strings.Builder
-			b.String()
-			s := strings.Split("127.0.0.1:5432", ":")
-			ip, port := s[0], s[1]
-			strings.Contains("seafood", "foo")
-
-			fmt.Println("Query --> ", query)
-		*/
 	}
 
 	if IsQueryNormal {
@@ -134,7 +118,7 @@ func ReadPacket(conn net.Conn) ([]byte, error) {
 	// 00000000 00000000 00000000 00101011 --> h[0]
 	// 00000000 00000000 01101000 00000000 --> h[1]<<8
 	// 00000000 00101111 00000000 00000000 --> h[2]<<16
-	// 00000000 00101111 01101000 00101011 --> bodyLength
+	// 00000000 00101111 01101000 00101011 --> bodyLength (Int32)
 
 	body := make([]byte, bodyLength)
 
