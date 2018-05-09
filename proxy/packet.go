@@ -18,8 +18,6 @@ const (
 	ERR_Packet = 255
 )
 
-var counter = 1
-
 // Determiner les erreurs possibles
 var ErrWritePacket = errors.New("error while writing packet payload")
 var ErrNoQueryPacket = errors.New("malformed packet")
@@ -71,9 +69,6 @@ func ProxyPacket(src, dst net.Conn) error {
 			break
 		case "insert":
 			go PerformInsertQuery(query)
-			// work query to send to HA Cluster
-			// open conn & send
-
 			break
 		case "update":
 			// copy query
@@ -94,6 +89,7 @@ func ProxyPacket(src, dst net.Conn) error {
 		}
 	}
 
+	// diff between SELECTs
 	if IsQueryNormal {
 		_, err = WritePacket(pkt, dst)
 		if err != nil {
@@ -104,7 +100,7 @@ func ProxyPacket(src, dst net.Conn) error {
 	return nil
 }
 
-// ReadPacket читает данные из conn, возвращая готовый пакет
+// ReadPacket reads data form conn, returns a ready packet
 func ReadPacket(conn net.Conn) ([]byte, error) {
 	header := []byte{0, 0, 0, 0}
 
@@ -171,8 +167,4 @@ func GetQueryType(query string) string {
 		return "update"
 	}
 	return ""
-}
-
-func Clean() {
-	counter = 1
 }
