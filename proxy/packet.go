@@ -71,11 +71,7 @@ func ProxyPacket(src, dst net.Conn) error {
 			go PerformInsertQuery(query)
 			break
 		case "update":
-			// copy query
-			// go PerformUpdateQuery(query)
-			// work query to send to HA Cluster
-			// open conn & send
-
+			go PerformUpdateQuery(query)
 			break
 		case "delete":
 			// copy query
