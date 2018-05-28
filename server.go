@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 
 	dbms "./proxy"
 )
@@ -20,8 +19,6 @@ const (
 
 func main() {
 	Initialisation()
-	fmt.Println("Before exit")
-	os.Exit(1)
 
 	// listen to port
 	listener, err := net.Listen("tcp", PROXY)
@@ -150,11 +147,6 @@ func Initialisation() {
 	}
 	if err = rows.Err(); err != nil {
 		panic(err.Error()) // proper error handling instead of panic in your app
-	}
-
-	fmt.Println("Show tables:")
-	for i := range tables {
-		fmt.Println(tables[i])
 	}
 
 	// *** CREATE DB & TABLES INTO ColumnStore ***
