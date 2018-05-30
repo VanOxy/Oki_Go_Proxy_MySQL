@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "../go-sql-driver/mysql"
 )
@@ -34,22 +35,24 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	// get params
 	params := strings.Split(strings.TrimSpace(okQuery[valIndex+6:len(okQuery)]), " ")
 	for i := range params {
-		params[i] = strings.Trim(params[i], "(,)")
+		params[i] = strings.Trim(params[i], "(,)'")
 		//fmt.Println("params:", params[i])
 	}
 
-	// ***** get id of inserted item *****
+	// ********* get id of inserted item *********
+
 	// connect relative DB to get the last id inserted
 	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
 	if err != nil {
 		panic(err.Error())
 	}
 
-	var id int
+	// declare id variable
+	var itemId int
 
 	// get id of inserted item
 	row := db.QueryRow("SELECT MAX(id)+1 FROM " + tableName)
-	switch err := row.Scan(&id); err {
+	switch err := row.Scan(&itemId); err {
 	case sql.ErrNoRows:
 		fmt.Println("No rows were returned!")
 		break
@@ -58,31 +61,36 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	default:
 		panic(err)
 	}
-	fmt.Println(id)
-	//os.Exit(1)
-	// *************************************
+	// *****************************************************
+	// *****************************************************
 
 	// close channel to deblock initial thread, because now it can writte into main DB
 	close(channel)
 	// close db conection
 	db.Close()
-	/*
-		// final query
-		qr := "INSERT INTO " + tableName + " ("
 
-		// connect HA
-		db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/")
-		if err != nil {
-			panic(err.Error())
-		}
-		defer db_mcs.Close()
+	// *********** Insert into HA ************
+	queryArguments := make([][]interface{}, len(columns))
+	for i := range columns {
+		queryArguments[i] = []interface{}{itemId, columns[i], params[i], time.Now().Format("2006-01-02 15:04:05")}
+	}
 
-		// executer la requette
-		_, errex := db.Exec(qr)
+	// connect HA
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
+
+	// executer les requette
+	for i := range queryArguments {
+		fmt.Println(queryArguments[i])
+		_, errex := db_mcs.Exec("INSERT INTO "+tableName+" VALUES (?, ?, ?, ?)", queryArguments[i]...)
 		if errex != nil {
 			panic(errex.Error())
 		}
-	*/
+	}
+	// ****************************************
 }
 
 func PerformUpdateQuery(query string) {
