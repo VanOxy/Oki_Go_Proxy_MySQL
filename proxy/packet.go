@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 )
 
 const (
@@ -17,6 +18,9 @@ const (
 	OK_Pack    = 254
 	ERR_Packet = 255
 )
+
+var mutex sync.Mutex
+var IsMutexLocked bool = false
 
 // Determiner les erreurs possibles
 var ErrWritePacket = errors.New("error while writing packet payload")
@@ -49,9 +53,13 @@ func ProxyPacket(src, dst net.Conn) error {
 	IsQueryNormal := true // flag
 	// check if packet is querry
 	if query, err := GetQueryString(pkt); err == nil {
+
 		// get first 7 chars from query
 		typeStr := query[0:7]
 		queryType := GetQueryType(typeStr)
+
+		// create channel
+		channel := make(chan struct{})
 
 		switch queryType {
 		case "select":
@@ -68,7 +76,13 @@ func ProxyPacket(src, dst net.Conn) error {
 			}
 			break
 		case "insert":
-			go PerformInsertQuery(query)
+			// *** MUTEX ***
+			mutex.Lock()
+			IsMutexLocked = true
+			go PerformInsertQuery(query, channel)
+			// waiting channel returns a value from thread 'PerformInsertQuery', kinda a sync or await_c#
+			// closing channel is happening into 'PerformInsertQuery' method
+			<-channel
 			break
 		case "update":
 			go PerformUpdateQuery(query)
@@ -88,6 +102,10 @@ func ProxyPacket(src, dst net.Conn) error {
 	// diff between SELECTs
 	if IsQueryNormal {
 		_, err = WritePacket(pkt, dst)
+		if IsMutexLocked {
+			mutex.Unlock()
+			IsMutexLocked = false
+		}
 		if err != nil {
 			return err
 		}

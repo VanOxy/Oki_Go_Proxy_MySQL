@@ -44,7 +44,7 @@ func main() {
 }
 
 func handleConnection(conn net.Conn) {
-	// fermer la connexion à la fin
+	// fermer la connexion client à la fin
 	defer conn.Close()
 
 	// connect MySQL server
@@ -58,7 +58,7 @@ func handleConnection(conn net.Conn) {
 
 	// ***** INIT CONNECION *****
 	// copy traffic from 'mysql' to 'conn' -> client
-	// -> because of mysqlProto which needs mysql sends 'Greeting' packet first, after what clients responds with login/passwd hashed
+	// -> because of mysqlProto which needs mysql_server sends 'Greeting' packet first, after what clients responds with login/passwd hashed
 	//go io.Copy(conn, mysql)
 	go MysqlToApp(mysql, conn)
 
@@ -80,7 +80,6 @@ func appToMysql(client net.Conn, mysql net.Conn) {
 			break
 		}
 	}
-	// send signal --> proxying done
 }
 
 func MysqlToApp(mysql net.Conn, client net.Conn) {

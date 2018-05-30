@@ -8,7 +8,7 @@ import (
 	_ "../go-sql-driver/mysql"
 )
 
-func PerformInsertQuery(query string) {
+func PerformInsertQuery(query string, channel chan struct{}) {
 
 	// sql = "INSERT INTO persons (name, age) VALUES('type1', 15)"
 
@@ -22,31 +22,32 @@ func PerformInsertQuery(query string) {
 
 	// get table name
 	tableName := strings.TrimSpace(okQuery[initIndex:columnsIndex])
-	fmt.Println(tableName)
+	//fmt.Println("tableName:", tableName)
 
 	// get columns
 	columns := strings.Split(strings.TrimSpace(okQuery[columnsIndex:valIndex]), " ")
 	for i := range columns {
 		columns[i] = strings.Trim(columns[i], "(,)")
-		fmt.Println(columns[i])
+		//fmt.Println("colunms:", columns[i])
 	}
 
 	// get params
 	params := strings.Split(strings.TrimSpace(okQuery[valIndex+6:len(okQuery)]), " ")
 	for i := range params {
 		params[i] = strings.Trim(params[i], "(,)")
-		fmt.Println(params[i])
+		//fmt.Println("params:", params[i])
 	}
 
-	// connect main DB
+	// ***** get id of inserted item *****
+	// connect relative DB to get the last id inserted
 	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
 	if err != nil {
 		panic(err.Error())
 	}
-	//defer db.Close()
+
+	var id int
 
 	// get id of inserted item
-	var id int
 	row := db.QueryRow("SELECT MAX(id)+1 FROM " + tableName)
 	switch err := row.Scan(&id); err {
 	case sql.ErrNoRows:
@@ -57,26 +58,30 @@ func PerformInsertQuery(query string) {
 	default:
 		panic(err)
 	}
-	db.Close()
 	fmt.Println(id)
+	//os.Exit(1)
+	// *************************************
 
+	// close channel to deblock initial thread, because now it can writte into main DB
+	close(channel)
+	// close db conection
+	db.Close()
 	/*
 		// final query
-		//qr := "INSERT INTO " + tableName + " ("
+		qr := "INSERT INTO " + tableName + " ("
 
 		// connect HA
+		db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/")
+		if err != nil {
+			panic(err.Error())
+		}
+		defer db_mcs.Close()
 
-			db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
-			if err != nil {
-				panic(err.Error())
-			}
-			defer db.Close()
-
-			// executer la requette
-			_, errex := db.Exec(query)
-			if errex != nil {
-				panic(errex.Error())
-			}
+		// executer la requette
+		_, errex := db.Exec(qr)
+		if errex != nil {
+			panic(errex.Error())
+		}
 	*/
 }
 
@@ -108,7 +113,9 @@ func PerformUpdateQuery(query string) {
 	idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:len(okQuery)]), "=")
 	for i := range idParams {
 		idParams[i] = strings.Trim(idParams[i], " ")
+		fmt.Println("----------")
 		fmt.Println("idParam:", idParams[i])
+		fmt.Println("----------")
 	}
 	//id := idParams[1]
 
@@ -134,7 +141,35 @@ func PerformUpdateQuery(query string) {
 }
 func PerformSelectQuery(query string) {
 
-	// sql = "SELECT id, firstname, lastname, (*) FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
+	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY t2"
+	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
+
+	// get query slice
+	okQuery := strings.TrimSpace(query)
+
+	// get indexes
+	initIndex := len("SELECT")
+	fromIndex := strings.Index(okQuery, "FROM")
+	whereIndex := strings.Index(okQuery, "WHERE")
+	historyIndex := strings.Index(okQuery, "HISTORY")
+
+	// get selects
+	if strings.Contains(okQuery[initIndex:fromIndex], "*") {
+
+	} else {
+
+	}
+
+	// get tablename
+	tableName := strings.TrimSpace(okQuery[fromIndex+4 : whereIndex])
+	fmt.Println("tablename:", tableName)
+
+	// get history type
+	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
+
+	} else {
+
+	}
 }
 
 func PerformDeleteQuery(query string) {
