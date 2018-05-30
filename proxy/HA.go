@@ -39,8 +39,8 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 		//fmt.Println("params:", params[i])
 	}
 
-	// ********* get id of inserted item *********
-
+	// **************** get id of inserted item ****************
+	// **********************************************************
 	// connect relative DB to get the last id inserted
 	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
 	if err != nil {
@@ -84,7 +84,7 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 
 	// executer les requette
 	for i := range queryArguments {
-		fmt.Println(queryArguments[i])
+		//fmt.Println(queryArguments[i])
 		_, errex := db_mcs.Exec("INSERT INTO "+tableName+" VALUES (?, ?, ?, ?)", queryArguments[i]...)
 		if errex != nil {
 			panic(errex.Error())
@@ -99,7 +99,6 @@ func PerformUpdateQuery(query string) {
 
 	// get query slice
 	okQuery := strings.TrimSpace(query)
-	fmt.Println("\nEnter fct, query:", okQuery)
 
 	// get indexes
 	initIndex := len("UPDATE")
@@ -108,43 +107,37 @@ func PerformUpdateQuery(query string) {
 
 	// get table name
 	tableName := strings.TrimSpace(okQuery[initIndex:setIndex])
-	fmt.Println("tablename:", tableName)
 
-	// get columns
+	// get column and its value
 	valueParams := strings.Split(strings.TrimSpace(okQuery[setIndex+3:whereIndex]), "=")
 	for i := range valueParams {
-		valueParams[i] = strings.Trim(valueParams[i], " ")
-		fmt.Println("valueParam:", valueParams[i])
+		valueParams[i] = strings.Trim(valueParams[i], " '")
 	}
+	column := valueParams[0]
+	value := valueParams[1]
 
 	// get id
 	idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:len(okQuery)]), "=")
 	for i := range idParams {
 		idParams[i] = strings.Trim(idParams[i], " ")
-		fmt.Println("----------")
-		fmt.Println("idParam:", idParams[i])
-		fmt.Println("----------")
 	}
-	//id := idParams[1]
+	itemId := idParams[1]
 
-	/*
-		// final query
-		//qr := "INSERT INTO " + tableName + " ("
+	// build query params
+	queryArguments := []interface{}{itemId, column, value, time.Now().Format("2006-01-02 15:04:05")}
 
-		// connect HA
+	// connect HA
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
 
-			db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
-			if err != nil {
-				panic(err.Error())
-			}
-			defer db.Close()
-
-			// executer la requette
-			_, errex := db.Exec(query)
-			if errex != nil {
-				panic(errex.Error())
-			}
-	*/
+	// executer la requette
+	_, errex := db_mcs.Exec("INSERT INTO "+tableName+" VALUES (?, ?, ?, ?)", queryArguments...)
+	if errex != nil {
+		panic(errex.Error())
+	}
 
 }
 func PerformSelectQuery(query string) {
