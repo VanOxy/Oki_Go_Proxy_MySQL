@@ -167,8 +167,8 @@ func Initialisation() {
 
 	// create tables
 	for i := range tables {
-		query := "CREATE TABLE IF NOT EXISTS " + tables[i] + " (id INT NOT NULL COMMENT 'autoincrement=1', column_name VARCHAR(30) NOT NULL, value VARCHAR(50) NOT NULL, reg_date DATETIME NOT NULL) engine=columnstore"
-
+		query := "CREATE TABLE IF NOT EXISTS " + tables[i] + " (id INT, column_name VARCHAR(30), value VARCHAR(50), timestamp DATETIME) engine=columnstore"
+		// id INT NOT NULL COMMENT 'autoincrement=1',
 		_, err = db_mcs.Exec(query)
 		if err != nil {
 			panic(err)
