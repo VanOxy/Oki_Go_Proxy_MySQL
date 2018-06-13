@@ -141,7 +141,6 @@ func PerformUpdateQuery(query string) {
 
 }
 func PerformSelectQuery(query string) {
-
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY t2"
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
 
@@ -149,30 +148,59 @@ func PerformSelectQuery(query string) {
 	okQuery := strings.TrimSpace(query)
 
 	// get indexes
-	initIndex := len("SELECT")
+	//initIndex := len("SELECT")
 	fromIndex := strings.Index(okQuery, "FROM")
 	whereIndex := strings.Index(okQuery, "WHERE")
 	historyIndex := strings.Index(okQuery, "HISTORY")
 
-	// get selects
-	if strings.Contains(okQuery[initIndex:fromIndex], "*") {
-
-	} else {
-
-	}
-
 	// get tablename
 	tableName := strings.TrimSpace(okQuery[fromIndex+4 : whereIndex])
-	fmt.Println("tablename:", tableName)
 
-	// get history type
+	// get id
+	idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:historyIndex]), "=")
+	for i := range idParams {
+		idParams[i] = strings.Trim(idParams[i], " ")
+	}
+	itemId := idParams[1]
+
+	/*
+		// get select value(s)
+		var selectParams []string
+		if strings.Contains(okQuery[initIndex:fromIndex], "*") {
+			selectParams[0] = "*"
+		} else {
+			selectParams = strings.Split(strings.TrimSpace(okQuery[initIndex:fromIndex]), ",")
+			for i := range selectParams {
+				selectParams[i] = strings.Trim(selectParams[i], " '")
+			}
+		}
+	*/
+
+	// connect HA
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
+
+	// get type --> between or not?
 	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
+		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
+		// BETWEEN '2009-10-20 00:00:00' AND '2009-10-20 23:59:59'
 
 	} else {
+		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
 
+		var time string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
+		query := "SELECT column_name as 'column', value, timestamp FROM " + tableName + " WHERE timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp > timestamp('" + time + " 23:59:59') GROUP BY column_name) ORDER BY column_name ASC"
+
+		_, err := db_mcs.Exec(query)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
 func PerformDeleteQuery(query string) {
-
+	// TODO
 }
