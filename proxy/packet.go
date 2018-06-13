@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -20,7 +21,6 @@ const (
 )
 
 var mutex sync.Mutex
-var IsMutexLocked bool = false
 
 // Determiner les erreurs possibles
 var ErrWritePacket = errors.New("error while writing packet payload")
@@ -28,55 +28,40 @@ var ErrNoQueryPacket = errors.New("malformed packet")
 
 // prends en parametre les connections de client et du serveur MySQL
 func ProxyPacket(src, dst net.Conn) error {
+
+	var IsMutexLocked bool = false
+	var IsQueryNormal bool = true
+
 	pkt, err := ReadPacket(src)
 	if err != nil {
 		return err
 	}
 
 	// see packets
-	/*
-		addr := src.RemoteAddr().String()
-		if addr == "192.168.1.115:3306" { 		// mysql server
-			fmt.Println(addr, " mysql: ", counter)
-			fmt.Println(string(pkt))
-			fmt.Println(pkt)
-			counter++
-		} else { 								// client
-			fmt.Println(addr, " client: ", counter)
-			fmt.Println(string(pkt))
-			fmt.Println(pkt)
-			counter++
-		}
-		fmt.Println("------------------------------------------------------------------------------------")
-	*/
+	//printCommunication(pkt)
 
-	IsQueryNormal := true // flag
 	// check if packet is querry
 	if query, err := GetQueryString(pkt); err == nil {
+
+		// create channel
+		channel := make(chan struct{})
 
 		// get first 7 chars from query
 		typeStr := query[0:7]
 		queryType := GetQueryType(typeStr)
 
-		// create channel
-		channel := make(chan struct{})
-
 		switch queryType {
 		case "select":
-			// check if custom or not
+			// if normal --> nothing todo
+
+			// if not...
 			if strings.Contains(query, "HISTORY") {
 				IsQueryNormal = false
-				// manage connection
-				// rework query
-				// how to --> ask crem
-				// open connection to HA Cluster
-				// send query
-				// catch data & send them to client.conn
-
+				go PerformSelectQuery(query)
 			}
 			break
-		case "insert":
-			// *** MUTEX ***
+		case "insert": // done
+			// mutex
 			mutex.Lock()
 			IsMutexLocked = true
 			go PerformInsertQuery(query, channel)
@@ -87,7 +72,7 @@ func ProxyPacket(src, dst net.Conn) error {
 		case "update":
 			go PerformUpdateQuery(query)
 			break
-		case "delete":
+		case "delete": // todo
 			// copy query
 			// go PerformDeleteQuery(query)
 			// work query to send to HA Cluster
@@ -101,11 +86,14 @@ func ProxyPacket(src, dst net.Conn) error {
 
 	// diff between SELECTs
 	if IsQueryNormal {
+
 		_, err = WritePacket(pkt, dst)
+
 		if IsMutexLocked {
 			mutex.Unlock()
 			IsMutexLocked = false
 		}
+
 		if err != nil {
 			return err
 		}
@@ -181,4 +169,10 @@ func GetQueryType(query string) string {
 		return "update"
 	}
 	return ""
+}
+
+func printCommunication(pkt []byte) {
+	fmt.Println(string(pkt))
+	fmt.Println(pkt)
+	fmt.Println("------------------------------------------------------------------------------------")
 }
