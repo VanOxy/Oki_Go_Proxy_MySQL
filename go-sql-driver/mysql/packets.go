@@ -17,8 +17,16 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"time"
 )
+
+var IsInitialisationOK bool
+
+func SetInitState(initState bool) {
+
+	IsInitialisationOK = initState
+}
 
 // Packets documentation:
 // http://dev.mysql.com/doc/internals/en/client-server-protocol.html
@@ -27,6 +35,7 @@ import (
 func (mc *mysqlConn) readPacket() ([]byte, error) {
 	var prevData []byte
 	var okiPacket []byte
+	fmt.Println("read" + strconv.FormatBool(IsInitialisationOK))
 	for {
 		// read packet header
 		data, err := mc.buf.readNext(4)
@@ -84,12 +93,15 @@ func (mc *mysqlConn) readPacket() ([]byte, error) {
 		if pktLen < maxPacketSize {
 			// zero allocations for non-split packets
 			if prevData == nil {
+
 				// *** oki ***
-				fmt.Println("------------------------------------------------------------------------------------")
-				fmt.Println("read:")
-				okiPacket = append(okiPacket, data...)
-				fmt.Println("1 : ", string(okiPacket))
-				fmt.Println("1b: ", okiPacket)
+				if IsInitialisationOK {
+					fmt.Println("------------------------------------------------------------------------------------")
+					fmt.Println("read:")
+					okiPacket = append(okiPacket, data...)
+					fmt.Println("1 : ", string(okiPacket))
+					fmt.Println("1b: ", okiPacket)
+				}
 				// ***********
 
 				return data, nil
@@ -116,6 +128,7 @@ func (mc *mysqlConn) readPacket() ([]byte, error) {
 
 // Write packet buffer 'data'
 func (mc *mysqlConn) writePacket(data []byte) error {
+	fmt.Println("write" + strconv.FormatBool(IsInitialisationOK))
 	pktLen := len(data) - 4
 
 	if pktLen > mc.maxAllowedPacket {
@@ -145,10 +158,12 @@ func (mc *mysqlConn) writePacket(data []byte) error {
 		}
 
 		// *** oki ***
-		fmt.Println("------------------------------------------------------------------------------------")
-		fmt.Println("write:")
-		fmt.Println("1 :", string(data))
-		fmt.Println("1b:", data)
+		if IsInitialisationOK {
+			fmt.Println("------------------------------------------------------------------------------------")
+			fmt.Println("write:")
+			fmt.Println("1 :", string(data))
+			fmt.Println("1b:", data)
+		}
 		// ***********
 
 		n, err := mc.netConn.Write(data[:4+size])

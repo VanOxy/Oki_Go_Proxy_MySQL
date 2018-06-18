@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 
+	handler "./handler"
 	dbms "./proxy"
 )
 
@@ -19,7 +20,6 @@ const (
 
 func main() {
 	Initialisation()
-
 	// listen to port
 	listener, err := net.Listen("tcp", PROXY)
 	if err != nil {
@@ -93,6 +93,9 @@ func MysqlToApp(mysql net.Conn, client net.Conn) {
 
 // create new db if not exist as well, as tables in fucntion of RDBMS tables
 func Initialisation() {
+
+	handler.SetInitState(false)
+
 	// *** GET TABLES FROM RELATIONAL ***
 	// connect to maxScale
 	db_mxsc, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
@@ -176,4 +179,5 @@ func Initialisation() {
 	}
 
 	tables = nil
+	handler.SetInitState(true)
 }
