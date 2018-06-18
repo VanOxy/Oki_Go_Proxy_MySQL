@@ -42,7 +42,7 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	// **************** get id of inserted item ****************
 	// **********************************************************
 	// connect relative DB to get the last id inserted
-	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb")
+	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb") // you can precise port adress:3307 for Maxscale using columnStore cluster
 	if err != nil {
 		panic(err.Error())
 	}
@@ -138,8 +138,8 @@ func PerformUpdateQuery(query string) {
 	if errex != nil {
 		panic(errex.Error())
 	}
-
 }
+
 func PerformSelectQuery(query string) {
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY t2"
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
@@ -186,15 +186,35 @@ func PerformSelectQuery(query string) {
 	// get type --> between or not?
 	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
 		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
-		// BETWEEN '2009-10-20 00:00:00' AND '2009-10-20 23:59:59'
+
+		// get dates
+		dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
+		for i := range dates {
+			dates[i] = strings.Trim(dates[i], " ")
+			//fmt.Println("colunms:", columns[i])
+		}
+
+		query := "SELECT column_name as 'column', value, timestamp FROM persons WHERE " + dates[0] + " < timestamp AND timestamp < " + dates[1] + " ORDER BY timestamp"
+
+		// see the stackTrace of function call
+		// insert channel into functions untill get into readPacket()
+
+		// we don't analyse the query result because we sniff packets
+		_, err := db_mcs.Query(query)
+		if err != nil {
+			panic(err)
+		}
 
 	} else {
 		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
 
 		var time string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
-		query := "SELECT column_name as 'column', value, timestamp FROM " + tableName + " WHERE timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp > timestamp('" + time + " 23:59:59') GROUP BY column_name) ORDER BY column_name ASC"
+		query := "SELECT column_name as 'column', value, timestamp FROM " + tableName + " WHERE timestamp IN (SELECT MIN(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp > timestamp('" + time + " 23:59:59') GROUP BY column_name) ORDER BY column_name ASC"
 
-		_, err := db_mcs.Exec(query)
+		// see the stackTrace of function call
+		// insert channel into functions untill get into readPacket()
+
+		_, err := db_mcs.Query(query)
 		if err != nil {
 			panic(err)
 		}
