@@ -11,11 +11,11 @@ import (
 
 const (
 	// client
-	OK_Packet   = 0
 	COM_QUIT    = 1
 	COM_INIT_DB = 2
 	COM_QUERY   = 3
 	// server
+	OK_Packet  = 0
 	OK_Pack    = 254
 	ERR_Packet = 255
 )
@@ -53,11 +53,12 @@ func ProxyPacket(src, dst net.Conn) error {
 		switch queryType {
 		case "select":
 			// if normal --> nothing todo
-
+			// ..
+			// ..
 			// if not...
 			if strings.Contains(query, "HISTORY") {
 				IsQueryNormal = false
-				go PerformSelectQuery(query)
+				PerformSelectQuery(query)
 			}
 			break
 		case "insert": // done
