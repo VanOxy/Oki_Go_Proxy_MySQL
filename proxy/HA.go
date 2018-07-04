@@ -9,6 +9,9 @@ import (
 	_ "../go-sql-driver/mysql"
 )
 
+// database name in columnStore
+var dbName string = "pure"
+
 func PerformInsertQuery(query string, channel chan struct{}) {
 
 	// sql = "INSERT INTO persons (name, age) VALUES('type1', 15)"
@@ -42,7 +45,7 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	// **************** get id of inserted item ****************
 	// **********************************************************
 	// connect relative DB to get the last id inserted
-	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/okidb") // you can precise port adress:3307 for Maxscale using columnStore cluster
+	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+dbName) // you can precise port adress:3307 for Maxscale using columnStore cluster
 	if err != nil {
 		panic(err.Error())
 	}
@@ -76,7 +79,7 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	}
 
 	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -127,7 +130,7 @@ func PerformUpdateQuery(query string) {
 	queryArguments := []interface{}{itemId, column, value, time.Now().Format("2006-01-02 15:04:05")}
 
 	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -140,6 +143,91 @@ func PerformUpdateQuery(query string) {
 	}
 }
 
+// v2
+func PerformSelectQuery(query string) {
+	// sql = "SELECT * FROM articles WHERE id=40 HISTORY t2"
+	// sql = "SELECT * FROM articles WHERE id=45 HISTORY BETWEEN t1, t2"
+
+	// get query slice
+	okQuery := strings.TrimSpace(query)
+
+	// get indexes
+	//initIndex := len("SELECT")
+	fromIndex := strings.Index(okQuery, "FROM")
+	whereIndex := strings.Index(okQuery, "WHERE")
+	historyIndex := strings.Index(okQuery, "HISTORY")
+
+	// get tablename
+	tableName := strings.TrimSpace(okQuery[fromIndex+4 : whereIndex])
+
+	// get id
+	idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:historyIndex]), "=")
+	itemId := strings.Trim(idParams[1], " ")
+
+	// get columns
+	//columns := strings.Trim(okQuery[6:fromIndex], " ")
+	//columns = columns + ", timestamp"
+
+	/*
+		// get select value(s)
+		var selectParams []string
+		if strings.Contains(okQuery[initIndex:fromIndex], "*") {
+			selectParams[0] = "*"
+		} else {
+			selectParams = strings.Split(strings.TrimSpace(okQuery[initIndex:fromIndex]), ",")
+			for i := range selectParams {
+				selectParams[i] = strings.Trim(selectParams[i], " '")
+			}
+		}
+	*/
+
+	// connect HA
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
+
+	// get type --> between or not?
+	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
+		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
+
+		// get dates
+		dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
+		for i := range dates {
+			dates[i] = strings.Trim(dates[i], " ")
+			fmt.Println("colunms:", dates[i])
+		}
+
+		query := okQuery[:historyIndex] + "AND '" + dates[0] + "' <= timestamp AND timestamp <= '" + dates[1] + "' ORDER BY timestamp"
+
+		// see the stackTrace of function call
+		// insert channel into functions untill get into readPacket()
+
+		// we don't analyse the query result because we sniff packets
+		_, err := db_mcs.Query(query)
+		if err != nil {
+			panic(err)
+		}
+
+	} else {
+		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
+
+		var date string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
+		query := okQuery[:fromIndex-1] + ", timestamp " + okQuery[fromIndex:historyIndex] + "AND timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp < '" + date + "')"
+
+		// see the stackTrace of function call
+		// insert channel into functions untill get into readPacket()
+
+		_, err := db_mcs.Query(query)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+/*
+// v1
 func PerformSelectQuery(query string) {
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY t2"
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
@@ -163,7 +251,7 @@ func PerformSelectQuery(query string) {
 	}
 	itemId := idParams[1]
 
-	/*
+	// ----------------------- to comment --------------------------------
 		// get select value(s)
 		var selectParams []string
 		if strings.Contains(okQuery[initIndex:fromIndex], "*") {
@@ -174,7 +262,7 @@ func PerformSelectQuery(query string) {
 				selectParams[i] = strings.Trim(selectParams[i], " '")
 			}
 		}
-	*/
+	// -----------------------------------------------------------------------
 
 	// connect HA
 	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
@@ -220,6 +308,7 @@ func PerformSelectQuery(query string) {
 		}
 	}
 }
+*/
 
 func PerformDeleteQuery(query string) {
 	// TODO
