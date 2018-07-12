@@ -19,7 +19,7 @@ const (
 )
 
 func main() {
-	Initialisation()
+	//Initialisation()
 	// listen to port
 	listener, err := net.Listen("tcp", PROXY)
 	if err != nil {
@@ -54,29 +54,24 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	fmt.Println("Proxy connected to MySQL")
+	fmt.Println("Proxy_server connected to MySQL_server")
 
 	// ***** INIT CONNECION *****
 	// copy traffic from 'mysql' to 'conn' -> client
-	// -> because of mysqlProto which needs mysql_server sends 'Greeting' packet first, after what clients responds with login/passwd hashed
+	// -> because of mysqlProto which require mysql_server sends 'Greeting' packet first, after what clients responds with hashed login/passwd
 	//go io.Copy(conn, mysql)
 	go MysqlToApp(mysql, conn)
 
 	// copy traffic form conn_client to mysql_server
 	appToMysql(conn, mysql)
 
-	// do smth like
-	/*
-		if(appToMysql && MysqlToApp){
-			continue
-		}
-	*/
 }
 
 func appToMysql(client net.Conn, mysql net.Conn) {
 	for {
-		err := dbms.ProxyPacket(client, mysql)
+		err := dbms.ProxyPacket(client, mysql, "mysql")
 		if err != nil {
+			fmt.Println("mysql : " + err.Error())
 			break
 		}
 	}
@@ -84,8 +79,9 @@ func appToMysql(client net.Conn, mysql net.Conn) {
 
 func MysqlToApp(mysql net.Conn, client net.Conn) {
 	for {
-		err := dbms.ProxyPacket(mysql, client)
+		err := dbms.ProxyPacket(mysql, client, "client")
 		if err != nil {
+			fmt.Println("client : " + err.Error())
 			break
 		}
 	}

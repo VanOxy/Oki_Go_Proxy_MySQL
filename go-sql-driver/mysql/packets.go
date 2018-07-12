@@ -17,16 +17,43 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strconv"
+	"strings"
 	"time"
 )
 
+// ****************************** oki *********************************
+// flags
 var IsInitialisationOK bool
+var SniffingAllowed bool = false
+var CommunicationAllowed bool = false
+var proxyQuery string
+var lambdaFlag bool = false
 
+// channel
+var packetsChannel *chan []byte
+
+// functions
 func SetInitState(initState bool) {
-
 	IsInitialisationOK = initState
 }
+
+func SetAllowCommunication(allowComm bool) {
+	CommunicationAllowed = allowComm
+}
+
+func SetAllowSniffing(allowSnif bool) {
+	SniffingAllowed = allowSnif
+}
+
+func AllocateChannel(channel *chan []byte) {
+	packetsChannel = channel
+}
+
+func AllocateQuery(query string) {
+	proxyQuery = query
+}
+
+// *******************************************************************
 
 // Packets documentation:
 // http://dev.mysql.com/doc/internals/en/client-server-protocol.html
@@ -34,8 +61,10 @@ func SetInitState(initState bool) {
 // Read packet to buffer 'data'
 func (mc *mysqlConn) readPacket() ([]byte, error) {
 	var prevData []byte
+	// ************************************** oki *************************
 	var okiPacket []byte
-	fmt.Println("read" + strconv.FormatBool(IsInitialisationOK))
+	//fmt.Println("read" + strconv.FormatBool(IsInitialisationOK))
+	// ***************************************************************
 	for {
 		// read packet header
 		data, err := mc.buf.readNext(4)
@@ -94,15 +123,31 @@ func (mc *mysqlConn) readPacket() ([]byte, error) {
 			// zero allocations for non-split packets
 			if prevData == nil {
 
-				// *** oki ***
+				// ************************************* oki **********************************************
+				// **************************************************************************************************
+
+				IsInitialisationOK = true
 				if IsInitialisationOK {
 					fmt.Println("------------------------------------------------------------------------------------")
-					fmt.Println("read:")
+					fmt.Println("READ:")
 					okiPacket = append(okiPacket, data...)
-					fmt.Println("1 : ", string(okiPacket))
-					fmt.Println("1b: ", okiPacket)
+					fmt.Println(string(okiPacket))
+					fmt.Println(okiPacket)
+
+					//CommunicationAllowed = false
+					if CommunicationAllowed == true {
+						// transit packet
+						*packetsChannel <- append(okiPacket, data...)
+
+						// activate EOF capture
+						if lambdaFlag == false {
+							lambdaFlag = true
+						}
+					}
 				}
-				// ***********
+
+				// **************************************************************************************************
+				// **************************************************************************************************
 
 				return data, nil
 			}
@@ -128,7 +173,9 @@ func (mc *mysqlConn) readPacket() ([]byte, error) {
 
 // Write packet buffer 'data'
 func (mc *mysqlConn) writePacket(data []byte) error {
-	fmt.Println("write" + strconv.FormatBool(IsInitialisationOK))
+	// ********** oki *********************
+	//fmt.Println("write" + strconv.FormatBool(IsInitialisationOK))
+	// ************************************
 	pktLen := len(data) - 4
 
 	if pktLen > mc.maxAllowedPacket {
@@ -157,14 +204,36 @@ func (mc *mysqlConn) writePacket(data []byte) error {
 			}
 		}
 
-		// *** oki ***
+		// ************************************** oki *******************************************************
+		// **************************************************************************************************
+		IsInitialisationOK = true
 		if IsInitialisationOK {
 			fmt.Println("------------------------------------------------------------------------------------")
-			fmt.Println("write:")
+			fmt.Println("WRITE:")
 			fmt.Println("1 :", string(data))
 			fmt.Println("1b:", data)
+
+			//SniffingAllowed = false // to remove after
+			if SniffingAllowed {
+				// catch query request
+				if CanGetQueryString(data) {
+					CommunicationAllowed = true
+				}
+
+				// catch EOF
+				//if bytes.Equal(data, EndOfCommPacket) && lambdaFlag {
+				if isPacketEndOfComm(data) && lambdaFlag {
+					CommunicationAllowed = false
+					lambdaFlag = false
+					SniffingAllowed = false
+					close(*packetsChannel)
+					fmt.Println("TRANSMISSION FINISHED. CHANNEL CLOSED.")
+				}
+			}
 		}
-		// ***********
+
+		// *******************************************************************************************************
+		// *******************************************************************************************************
 
 		n, err := mc.netConn.Write(data[:4+size])
 		if err == nil && n == 4+size {
@@ -1370,3 +1439,54 @@ func (rows *binaryRows) readRow(dest []driver.Value) error {
 
 	return nil
 }
+
+// ******************************* oki **************************************
+
+// CanGetQueryString проверяет, является ли пакет командой COM_QUERY
+func CanGetQueryString(pkt []byte) bool {
+	return len(pkt) > 5 && (pkt[4] == 3)
+}
+
+// returns packet value from 6th bite --> Query as String --> 1-4:header, 5:command, 6-n;querry
+func GetQueryString(pkt []byte) (string, error) {
+	if CanGetQueryString(pkt) {
+		return string(pkt[5:]), nil
+	}
+
+	return "", errors.New("ErrNoQueryPacket")
+}
+
+func GetQueryType(query string) string {
+	s := strings.ToLower(query)
+	if strings.Contains(s, "select") {
+		return "select"
+	}
+	if strings.Contains(s, "delete") {
+		return "delete"
+	}
+	if strings.Contains(s, "insert") {
+		return "insert"
+	}
+	if strings.Contains(s, "update") {
+		return "update"
+	}
+	return ""
+}
+
+func isPacketEndOfComm(pkt []byte) bool {
+	EndOfCommPacket := []byte{1, 0, 0, 0, 1}
+
+	if pkt == nil {
+		return false
+	}
+
+	for i := range EndOfCommPacket {
+		if pkt[i] != EndOfCommPacket[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ********************************************************************

@@ -7,6 +7,8 @@ import (
 	"net"
 	"strings"
 	"sync"
+
+	handler "../handler"
 )
 
 const (
@@ -25,9 +27,10 @@ var mutex sync.Mutex
 // Determiner les erreurs possibles
 var ErrWritePacket = errors.New("error while writing packet payload")
 var ErrNoQueryPacket = errors.New("malformed packet")
+var ErrEndOfComm = errors.New("End of communication")
 
 // prends en parametre les connections de client et du serveur MySQL
-func ProxyPacket(src, dst net.Conn) error {
+func ProxyPacket(src, dst net.Conn, mode string) error {
 
 	var IsMutexLocked bool = false
 	var IsQueryNormal bool = true
@@ -37,8 +40,14 @@ func ProxyPacket(src, dst net.Conn) error {
 		return err
 	}
 
+	if mode == "mysql" {
+		fmt.Println("cli --> mysql:")
+	} else {
+		fmt.Println("mysql --> cli:")
+	}
+
 	// see packets
-	//printCommunication(pkt)
+	printCommunication(pkt)
 
 	// check if packet is querry
 	if query, err := GetQueryString(pkt); err == nil {
@@ -47,24 +56,35 @@ func ProxyPacket(src, dst net.Conn) error {
 		channel := make(chan struct{})
 
 		// get first 7 chars from query
-		typeStr := query[0:7]
-		queryType := GetQueryType(typeStr)
+		queryType := GetQueryType(query[0:7])
 
 		switch queryType {
 		case "select":
-			// if normal --> nothing todo
-			// ..
-			// ..
-			// if not...
+			// if classical query - nothing todo. If not:
 			if strings.Contains(query, "HISTORY") {
-				IsQueryNormal = false
-				PerformSelectQuery(query)
+
+				pktCh := make(chan []byte)
+				handler.AllocateChannel(&pktCh)
+
+				fmt.Println("SWITCH MODE..")
+
+				IsQueryNormal = false // --> so interrupt comm & grap packets from HA
+				go PerformSelectQuery(query)
+
+				for packetFromHA := range pktCh {
+					fmt.Println("pkt from HA : ", string(packetFromHA))
+					fmt.Println("pkt from HA : ", packetFromHA)
+					_, err = WritePacket(packetFromHA, src)
+				}
+				return ErrEndOfComm
+
 			}
 			break
 		case "insert": // done
 			// mutex
 			mutex.Lock()
 			IsMutexLocked = true
+
 			go PerformInsertQuery(query, channel)
 			// waiting channel returns a value from thread 'PerformInsertQuery', kinda a sync or await_c#
 			// closing channel is happening into 'PerformInsertQuery' method
@@ -73,12 +93,12 @@ func ProxyPacket(src, dst net.Conn) error {
 		case "update":
 			go PerformUpdateQuery(query)
 			break
-		case "delete": // todo
+		case "delete":
+			// todo
 			// copy query
 			// go PerformDeleteQuery(query)
 			// work query to send to HA Cluster
 			// open conn & send
-
 			break
 		default:
 			break
@@ -89,14 +109,13 @@ func ProxyPacket(src, dst net.Conn) error {
 	if IsQueryNormal {
 
 		_, err = WritePacket(pkt, dst)
+		if err != nil {
+			return err
+		}
 
 		if IsMutexLocked {
 			mutex.Unlock()
 			IsMutexLocked = false
-		}
-
-		if err != nil {
-			return err
 		}
 	}
 
