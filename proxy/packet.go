@@ -72,11 +72,10 @@ func ProxyPacket(src, dst net.Conn, mode string) error {
 				go PerformSelectQuery(query)
 
 				for packetFromHA := range pktCh {
-					fmt.Println("pkt from HA : ", string(packetFromHA))
 					fmt.Println("pkt from HA : ", packetFromHA)
 					_, err = WritePacket(packetFromHA, src)
 				}
-				return ErrEndOfComm
+				return io.EOF
 
 			}
 			break

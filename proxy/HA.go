@@ -7,9 +7,11 @@ import (
 	"time"
 
 	_ "../go-sql-driver/mysql"
+	handler "../handler"
 )
 
 // database name in columnStore
+//var dbName string = "okidb"
 var dbName string = "pure"
 
 func PerformInsertQuery(query string, channel chan struct{}) {
@@ -169,6 +171,7 @@ func PerformSelectQuery(query string) {
 	//columns = columns + ", timestamp"
 
 	/*
+		// ----------------------- to comment --------------------------------
 		// get select value(s)
 		var selectParams []string
 		if strings.Contains(okQuery[initIndex:fromIndex], "*") {
@@ -179,14 +182,8 @@ func PerformSelectQuery(query string) {
 				selectParams[i] = strings.Trim(selectParams[i], " '")
 			}
 		}
+		// -------------------------------------------------------------------
 	*/
-
-	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db_mcs.Close()
 
 	// get type --> between or not?
 	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
@@ -201,14 +198,8 @@ func PerformSelectQuery(query string) {
 
 		query := okQuery[:historyIndex] + "AND '" + dates[0] + "' <= timestamp AND timestamp <= '" + dates[1] + "' ORDER BY timestamp"
 
-		// see the stackTrace of function call
-		// insert channel into functions untill get into readPacket()
-
-		// we don't analyse the query result because we sniff packets
-		_, err := db_mcs.Query(query)
-		if err != nil {
-			panic(err)
-		}
+		handler.ActivateSniffing()
+		executeQuery(query)
 
 	} else {
 		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
@@ -216,19 +207,15 @@ func PerformSelectQuery(query string) {
 		var date string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
 		query := okQuery[:fromIndex-1] + ", timestamp " + okQuery[fromIndex:historyIndex] + "AND timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp < '" + date + "')"
 
-		// see the stackTrace of function call
-		// insert channel into functions untill get into readPacket()
-
-		_, err := db_mcs.Query(query)
-		if err != nil {
-			panic(err)
-		}
+		handler.ActivateSniffing()
+		executeQuery(query)
 	}
 }
 
 /*
 // v1
 func PerformSelectQuery(query string) {
+
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY t2"
 	// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
 
@@ -251,27 +238,27 @@ func PerformSelectQuery(query string) {
 	}
 	itemId := idParams[1]
 
-	// ----------------------- to comment --------------------------------
-		// get select value(s)
-		var selectParams []string
-		if strings.Contains(okQuery[initIndex:fromIndex], "*") {
-			selectParams[0] = "*"
-		} else {
-			selectParams = strings.Split(strings.TrimSpace(okQuery[initIndex:fromIndex]), ",")
-			for i := range selectParams {
-				selectParams[i] = strings.Trim(selectParams[i], " '")
+		// ----------------------- to comment --------------------------------
+			// get select value(s)
+			var selectParams []string
+			if strings.Contains(okQuery[initIndex:fromIndex], "*") {
+				selectParams[0] = "*"
+			} else {
+				selectParams = strings.Split(strings.TrimSpace(okQuery[initIndex:fromIndex]), ",")
+				for i := range selectParams {
+					selectParams[i] = strings.Trim(selectParams[i], " '")
+				}
 			}
-		}
-	// -----------------------------------------------------------------------
+		// -----------------------------------------------------------------------
 
 	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db_mcs.Close()
 
-	// get type --> between or not?
+	// get history type
 	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
 		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
 
@@ -282,10 +269,7 @@ func PerformSelectQuery(query string) {
 			//fmt.Println("colunms:", columns[i])
 		}
 
-		query := "SELECT column_name as 'column', value, timestamp FROM persons WHERE " + dates[0] + " < timestamp AND timestamp < " + dates[1] + " ORDER BY timestamp"
-
-		// see the stackTrace of function call
-		// insert channel into functions untill get into readPacket()
+		query := "SELECT column_name as 'column', value, timestamp FROM persons WHERE '" + dates[0] + "' < timestamp AND timestamp < '" + dates[1] + "' ORDER BY timestamp"
 
 		// we don't analyse the query result because we sniff packets
 		_, err := db_mcs.Query(query)
@@ -299,9 +283,6 @@ func PerformSelectQuery(query string) {
 		var time string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
 		query := "SELECT column_name as 'column', value, timestamp FROM " + tableName + " WHERE timestamp IN (SELECT MIN(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp > timestamp('" + time + " 23:59:59') GROUP BY column_name) ORDER BY column_name ASC"
 
-		// see the stackTrace of function call
-		// insert channel into functions untill get into readPacket()
-
 		_, err := db_mcs.Query(query)
 		if err != nil {
 			panic(err)
@@ -311,5 +292,62 @@ func PerformSelectQuery(query string) {
 */
 
 func PerformDeleteQuery(query string) {
-	// TODO
+
+}
+
+func executeQuery(query string) {
+
+	// connect HA
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
+
+	rows, err := db_mcs.Query(query)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+
+	// Make a slice for the values
+	values := make([]sql.RawBytes, len(columns))
+
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	// Fetch rows
+	for rows.Next() {
+		// get RawBytes from data
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			panic(err.Error()) // proper error handling instead of panic in your app
+		}
+
+		// Now do something with the data.
+		// Here we just print each column as a string.
+		//var value string
+		for k, i := range values {
+			_ = k
+			_ = i
+			// // Here we can check if the value is nil (NULL value)
+			// if col == nil {
+			// 	value = "NULL"
+			// } else {
+			// 	value = string(col)
+			// }
+			// fmt.Println(columns[i], ": ", value)
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
 }

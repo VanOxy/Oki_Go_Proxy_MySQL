@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
 	"log"
 	"net"
+	"os"
 
+	_ "./go-sql-driver/mysql"
 	handler "./handler"
 	dbms "./proxy"
 )
@@ -19,7 +22,12 @@ const (
 )
 
 func main() {
+
+	// to delete
+	handler.SetInitState(true)
+
 	//Initialisation()
+
 	// listen to port
 	listener, err := net.Listen("tcp", PROXY)
 	if err != nil {
@@ -68,17 +76,18 @@ func handleConnection(conn net.Conn) {
 
 }
 
-func appToMysql(client net.Conn, mysql net.Conn) {
+func appToMysql(client, mysql net.Conn) {
 	for {
 		err := dbms.ProxyPacket(client, mysql, "mysql")
 		if err != nil {
 			fmt.Println("mysql : " + err.Error())
+			// may be close it here, or may be otherwise
 			break
 		}
 	}
 }
 
-func MysqlToApp(mysql net.Conn, client net.Conn) {
+func MysqlToApp(mysql, client net.Conn) {
 	for {
 		err := dbms.ProxyPacket(mysql, client, "client")
 		if err != nil {
@@ -177,4 +186,67 @@ func Initialisation() {
 
 	tables = nil
 	handler.SetInitState(true)
+}
+
+func testSomeFeatures() {
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
+
+	query := "SELECT column_name as 'column', value, timestamp FROM persons WHERE '2018-06-12 01:32:54' < timestamp AND timestamp < '2018-06-18 02:39:20'"
+
+	rows, gna := db_mcs.Query(query)
+	if err != nil {
+		panic(gna.Error())
+	}
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+
+	// Make a slice for the values
+	values := make([]sql.RawBytes, len(columns))
+
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	// Fetch rows
+	for rows.Next() {
+		// get RawBytes from data
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			panic(err.Error()) // proper error handling instead of panic in your app
+		}
+
+		// Now do something with the data.
+		// Here we just print each column as a string.
+		//var value string
+		for k, i := range values {
+			_ = k
+			_ = i
+			// // Here we can check if the value is nil (NULL value)
+			// if col == nil {
+			// 	value = "NULL"
+			// } else {
+			// 	value = string(col)
+			// }
+			// fmt.Println(columns[i], ": ", value)
+		}
+	}
+	if err = rows.Err(); err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+
+	// **************************** wait input *********************************
+	fmt.Print("insert y value here: ")
+	input := bufio.NewScanner(os.Stdin)
+	input.Scan()
+	fmt.Println(input.Text())
+	// *************************************************************************
 }
