@@ -53,6 +53,7 @@ func handleConnection(conn net.Conn) {
 		log.Fatalf("%s: %s", "ERROR", err.Error())
 		return
 	}
+	defer mysql.Close()
 
 	fmt.Println("Proxy_server connected to MySQL_server")
 
