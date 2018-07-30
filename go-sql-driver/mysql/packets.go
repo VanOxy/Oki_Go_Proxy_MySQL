@@ -160,12 +160,11 @@ func (mc *mysqlConn) readPacket() ([]byte, error) {
 								// fermer le channel
 								close(*packetsChannel)
 								fmt.Println("TRANSMISSION FINISHED. CHANNEL CLOSED.")
-
+								fmt.Println(EOF_counter)
 							}
 						}
 					}
 				}
-				fmt.Println(EOF_counter)
 
 				// **************************************************************************************************
 				// **************************************************************************************************
