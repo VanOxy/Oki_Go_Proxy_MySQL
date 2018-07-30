@@ -18,7 +18,7 @@ const (
 	COM_QUERY   = 3
 	// server
 	OK_Packet  = 0
-	OK_Pack    = 254
+	EOF_Packet = 254
 	ERR_Packet = 255
 )
 
@@ -53,7 +53,6 @@ func ProxyPacket(src, dst net.Conn, mode string) error {
 	if query, err := GetQueryString(pkt); err == nil {
 
 		// create channel
-		channel := make(chan struct{})
 
 		// get first 7 chars from query
 		queryType := GetQueryType(query[0:7])
@@ -79,11 +78,12 @@ func ProxyPacket(src, dst net.Conn, mode string) error {
 
 			}
 			break
-		case "insert": // done
+		case "insert":
 			// mutex
 			mutex.Lock()
 			IsMutexLocked = true
 
+			channel := make(chan struct{})
 			go PerformInsertQuery(query, channel)
 			// waiting channel returns a value from thread 'PerformInsertQuery', kinda a sync or await_c#
 			// closing channel is happening into 'PerformInsertQuery' method
