@@ -121,6 +121,9 @@ func PerformUpdateQuery(query string) {
 
 	// sql = "UPDATE MyGuests SET lastname='Doe' WHERE id=2"
 
+	// ********************* GET PARAMETERS **************************
+	// ***************************************************************
+
 	// get query slice
 	okQuery := strings.TrimSpace(query)
 
@@ -132,36 +135,118 @@ func PerformUpdateQuery(query string) {
 	// get table name
 	tableName := strings.TrimSpace(okQuery[initIndex:setIndex])
 
-	// get column and its value
-	valueParams := strings.Split(strings.TrimSpace(okQuery[setIndex+3:whereIndex]), "=")
-	for i := range valueParams {
-		valueParams[i] = strings.Trim(valueParams[i], " '")
+	// get column and its value to UPDATE
+	valuecolumns := strings.Split(strings.TrimSpace(okQuery[setIndex+3:whereIndex]), "=")
+	for i := range valuecolumns {
+		valuecolumns[i] = strings.Trim(valuecolumns[i], " '")
 	}
-	column := valueParams[0]
-	value := valueParams[1]
+	column := valuecolumns[0]
+	value := valuecolumns[1]
 
-	// get id
-	idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:len(okQuery)]), "=")
-	for i := range idParams {
-		idParams[i] = strings.Trim(idParams[i], " ")
+	fmt.Println(column)
+	fmt.Println(value)
+
+	// get ID
+	idcolumns := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:len(okQuery)]), "=")
+	for i := range idcolumns {
+		idcolumns[i] = strings.Trim(idcolumns[i], " ")
 	}
-	itemId := idParams[1]
+	itemId := idcolumns[1]
 
-	// build query params
-	queryArguments := []interface{}{itemId, column, value, time.Now().Format("2006-01-02 15:04:05")}
+	// **************************************************
+	// **************************************************
 
-	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
+	// ***************** GET LAST DATA ******************
+	// **************************************************
+
+	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+handler.GetDbName())
 	if err != nil {
 		panic(err.Error())
 	}
-	defer db_mcs.Close()
+	defer db.Close()
+
+	qr := "SELECT * FROM articles WHERE id=" + itemId + " ORDER BY timestamp DESC LIMIT 1"
+
+	res, err := db.Query(qr)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// Get column names
+	columns, err := res.Columns()
+	if err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+
+	// Make a slices for the values
+	valuesArray := make([]string, len(columns))
+	values := make([]sql.RawBytes, len(columns))
+	scanArgs := make([]interface{}, len(values))
+
+	// associate, because .Scan() needs an []interface{}
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	// Fetch rows
+	for res.Next() {
+		err = res.Scan(scanArgs...)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		for i, val := range values {
+			if val == nil {
+				valuesArray[i] = "NULL"
+			} else {
+				valuesArray[i] = string(val)
+			}
+		}
+	}
+
+	if err = res.Err(); err != nil {
+		panic(err.Error())
+	}
+
+	// *****************************************************
+	// *****************************************************
+
+	// ************ INSERT DATA ****************************
+	// *****************************************************
+
+	// build query columns
+	arguments := []interface{}{} // in fact values
+	valuesString := "(?,"
+
+	for i := 0; i < len(columns); i++ {
+		// manage data
+		if column == columns[i] {
+			arguments = append(arguments, value)
+		} else if "timestamp" == columns[i] {
+			arguments = append(arguments, time.Now().Format("2006-01-02 15:04:05"))
+		} else {
+			arguments = append(arguments, valuesArray[i])
+		}
+
+		// manage (?,?) values
+		if i == len(columns)-2 {
+			valuesString = valuesString + " ?)"
+		} else if i == len(columns)-1 {
+			// do nothing
+		} else {
+			valuesString = valuesString + " ?,"
+		}
+	}
+
+	qr = "INSERT INTO " + tableName + " VALUES " + valuesString
 
 	// executer la requette
-	_, errex := db_mcs.Exec("INSERT INTO "+tableName+" VALUES (?, ?, ?, ?)", queryArguments...)
+	_, errex := db.Exec(qr, arguments...)
 	if errex != nil {
 		panic(errex.Error())
 	}
+	// *****************************************************
+	// *****************************************************
 }
 
 // v2
