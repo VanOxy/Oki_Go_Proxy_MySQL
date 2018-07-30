@@ -45,9 +45,10 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	}
 
 	// **************** get id of inserted item ****************
-	// **********************************************************
+	// *********************************************************
+
 	// connect relative DB to get the last id inserted
-	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+dbName) // you can precise port adress:3307 for Maxscale using columnStore cluster
+	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+handler.GetDbName()) // you can precise port adress:3307 for Maxscale using columnStore cluster
 	if err != nil {
 		panic(err.Error())
 	}
@@ -64,38 +65,56 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 	case nil:
 		break
 	default:
-		panic(err)
+		panic(err.Error())
 	}
-	// *****************************************************
-	// *****************************************************
 
 	// close channel to deblock initial thread, because now it can writte into main DB
 	close(channel)
 	// close db conection
 	db.Close()
 
+	// ***************************************
+	// ***************************************
+
 	// *********** Insert into HA ************
-	queryArguments := make([][]interface{}, len(columns))
-	for i := range columns {
-		queryArguments[i] = []interface{}{itemId, columns[i], params[i], time.Now().Format("2006-01-02 15:04:05")}
+	// ***************************************
+
+	// create query
+	arguments := []interface{}{itemId}
+	values := "(?,"
+	for i := 0; i < len(params); i++ {
+		arguments = append(arguments, params[i])
+
+		if i == len(params)-1 {
+			values = values + " ?, ?)"
+		} else {
+			values = values + " ?,"
+		}
 	}
+	arguments = append(arguments, time.Now().Format("2006-01-02 15:04:05"))
 
 	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+dbName)
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+handler.GetDbName())
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db_mcs.Close()
 
-	// executer les requette
-	for i := range queryArguments {
-		//fmt.Println(queryArguments[i])
-		_, errex := db_mcs.Exec("INSERT INTO "+tableName+" VALUES (?, ?, ?, ?)", queryArguments[i]...)
-		if errex != nil {
-			panic(errex.Error())
-		}
+	qr := "INSERT INTO " + tableName + " VALUES " + values
+
+	/*
+		fmt.Println(qr)
+		fmt.Println(arguments)
+		os.Exit(3)
+	*/
+
+	// executer la requette
+	_, errex := db_mcs.Exec(qr, arguments...)
+	if errex != nil {
+		panic(errex.Error())
 	}
-	// ****************************************
+	// ***************************************
+	// ***************************************
 }
 
 func PerformUpdateQuery(query string) {
