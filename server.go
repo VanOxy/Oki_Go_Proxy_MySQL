@@ -23,9 +23,8 @@ const (
 )
 
 func main() {
-
-	handler.SetInitState(true)
 	handler.SetDbName(DB_NAME)
+	handler.SetInitState(false)
 
 	// Create history database if not exist
 	//Initialisation()
@@ -99,7 +98,7 @@ func MysqlToApp(mysql, client net.Conn) {
 	}
 }
 
-// create new db if not exist as well, as tables in fucntion of RDBMS tables
+// create new res if not exist as well, as tables in fucntion of RDBMS tables
 func Initialisation() {
 
 	// to not sniff packets during initialisation
@@ -151,13 +150,13 @@ func GetTablesFromRelationalDatabase() []string {
 	defer db_mxsc.Close()
 
 	// query
-	rows, err := db_mxsc.Query("SHOW TABLES FROM " + DB_NAME)
+	res, err := db_mxsc.Query("SHOW TABLES FROM " + DB_NAME)
 	if err != nil {
 		panic(err.Error())
 	}
 
 	// Get column names
-	columns, err := rows.Columns()
+	columns, err := res.Columns()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -173,10 +172,10 @@ func GetTablesFromRelationalDatabase() []string {
 	// tables
 	var tables []string
 
-	// Fetch rows
-	for rows.Next() {
+	// Fetch res
+	for res.Next() {
 		// get RawBytes from data
-		err = rows.Scan(scanArgs...)
+		err = res.Scan(scanArgs...)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -193,7 +192,7 @@ func GetTablesFromRelationalDatabase() []string {
 			}
 		}
 	}
-	if err = rows.Err(); err != nil {
+	if err = res.Err(); err != nil {
 		panic(err.Error()) // proper error handling instead of panic in your app
 	}
 
@@ -213,13 +212,13 @@ func GetDbStructure(tables []string) [][]string {
 	for _, tableName := range tables {
 
 		// query
-		rows, err := db_mxsc.Query("SHOW COLUMNS FROM " + tableName)
+		res, err := db_mxsc.Query("SHOW COLUMNS FROM " + tableName)
 		if err != nil {
 			panic(err.Error())
 		}
 
 		// Get column names
-		columns, err := rows.Columns()
+		columns, err := res.Columns()
 		if err != nil {
 			panic(err.Error())
 		}
@@ -232,10 +231,10 @@ func GetDbStructure(tables []string) [][]string {
 			scanArgs[i] = &values[i]
 		}
 
-		// Fetch rows
-		for rows.Next() {
+		// Fetch res
+		for res.Next() {
 			// get RawBytes from data
-			err = rows.Scan(scanArgs...)
+			err = res.Scan(scanArgs...)
 			if err != nil {
 				panic(err.Error())
 			}
@@ -253,7 +252,7 @@ func GetDbStructure(tables []string) [][]string {
 			}
 		}
 
-		if err = rows.Err(); err != nil {
+		if err = res.Err(); err != nil {
 			panic(err.Error()) // proper error handling instead of panic in your app
 		}
 
@@ -267,59 +266,9 @@ func CreateHistoryDb(db_dump [][]string) {
 }
 
 func testSomeFeatures() {
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/okidb")
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db_mcs.Close()
 
-	query := "SELECT column_name as 'column', value, timestamp FROM persons WHERE '2018-06-12 01:32:54' < timestamp AND timestamp < '2018-06-18 02:39:20'"
-
-	rows, gna := db_mcs.Query(query)
-	if err != nil {
-		panic(gna.Error())
-	}
-
-	// Get column names
-	columns, err := rows.Columns()
-	if err != nil {
-		panic(err.Error()) // proper error handling instead of panic in your app
-	}
-
-	// Make a slice for the values
-	values := make([]sql.RawBytes, len(columns))
-
-	scanArgs := make([]interface{}, len(values))
-	for i := range values {
-		scanArgs[i] = &values[i]
-	}
-
-	// Fetch rows
-	for rows.Next() {
-		// get RawBytes from data
-		err = rows.Scan(scanArgs...)
-		if err != nil {
-			panic(err.Error()) // proper error handling instead of panic in your app
-		}
-
-		// Now do something with the data.
-		// Here we just print each column as a string.
-		//var value string
-		for k, i := range values {
-			_ = k
-			_ = i
-			// // Here we can check if the value is nil (NULL value)
-			// if col == nil {
-			// 	value = "NULL"
-			// } else {
-			// 	value = string(col)
-			// }
-			// fmt.Println(columns[i], ": ", value)
-		}
-	}
-	if err = rows.Err(); err != nil {
-		panic(err.Error()) // proper error handling instead of panic in your app
-	}
+	//query := "SELECT column_name as 'column', value, timestamp FROM persons WHERE '2018-06-12 01:32:54' < timestamp AND timestamp < '2018-06-18 02:39:20'"
+	// query := "INSERT INTO articles (id, ref, nom, stock, prix_vente, timestamp) SELECT (id, 'hkdfl', nom, stock, prix_vente, now()) FROM articles WHERE id=40"
 
 	// **************************** wait input *********************************
 	fmt.Print("insert y value here: ")
