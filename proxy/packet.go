@@ -12,14 +12,12 @@ import (
 )
 
 const (
-	// client
+	OK_Packet   = 0
 	COM_QUIT    = 1
 	COM_INIT_DB = 2
 	COM_QUERY   = 3
-	// server
-	OK_Packet  = 0
-	EOF_Packet = 254
-	ERR_Packet = 255
+	EOF_Packet  = 254
+	ERR_Packet  = 255
 )
 
 var mutex sync.Mutex

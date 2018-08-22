@@ -24,7 +24,7 @@ const (
 
 func main() {
 	handler.SetDbName(DB_NAME)
-	handler.SetInitState(false)
+	handler.SetInitState(true)
 
 	// Create history database if not exist
 	//Initialisation()

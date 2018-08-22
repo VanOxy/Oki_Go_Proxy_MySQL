@@ -292,12 +292,13 @@ func PerformSelectQuery(query string) {
 	// get type --> between or not?
 	if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
 		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2"
+		// sql = "SELECT articles.ref, articles.nom, fournisseurs.prenom FROM articles, fournisseurs WHERE articles.id = fournisseurs.id_article HISTORY BETWEEN t1, t2" // join
 
 		// get dates
 		dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
 		for i := range dates {
 			dates[i] = strings.Trim(dates[i], " ")
-			fmt.Println("colunms:", dates[i])
+			//fmt.Println("columns:", dates[i])
 		}
 
 		query := okQuery[:historyIndex] + "AND '" + dates[0] + "' <= timestamp AND timestamp <= '" + dates[1] + "' ORDER BY timestamp"
@@ -307,6 +308,7 @@ func PerformSelectQuery(query string) {
 
 	} else {
 		// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
+		// sql = "SELECT articles.ref, articles.nom, fournisseurs.prenom FROM articles, fournisseurs WHERE articles.id = fournisseurs.id_article HISTORY t1" // join
 
 		var date string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
 		query := okQuery[:fromIndex-1] + ", timestamp " + okQuery[fromIndex:historyIndex] + "AND timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp < '" + date + "')"
