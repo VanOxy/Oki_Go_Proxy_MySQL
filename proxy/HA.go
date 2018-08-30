@@ -3,6 +3,7 @@ package proxy
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -285,75 +286,108 @@ func PerformSelectQuery(query string) {
 			dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
 			for i := range dates {
 				dates[i] = strings.Trim(dates[i], " ")
-				fmt.Println("columns:", dates[i])
 			}
-
 			query := okQuery[:fromIndex+5] + tableOne + ", " + tableTwo + " WHERE" + okQuery[onIndex+2:historyIndex] + "AND '" + dates[0] + "' <= " + tableOne + ".timestamp AND " + tableOne + ".timestamp <= '" + dates[1] + "' AND '" + dates[0] + "' <= " + tableTwo + ".timestamp AND " + tableTwo + ".timestamp <= '" + dates[1] + "' ORDER BY " + tableOne + ".timestamp, " + tableTwo + ".timestamp"
-			fmt.Println(query)
-
-			//os.Exit(3)
 
 			handler.ActivateSniffing()
 			executeQuery(query)
 
 		} else {
+			os.Exit(3)
+			/*
+				var date string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
+				query := okQuery[:fromIndex] + okQuery[fromIndex:historyIndex] + "AND timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp < '" + date + "')"
 
+				handler.ActivateSniffing()
+				executeQuery(query)
+			*/
 		}
+		// SELECT articles.id, articles.ref, articles.stock, fournisseurs.id, fournisseurs.prix_achat FROM articles, fournisseurs WHERE articles.id=fournisseurs.id_article HISTORY t1
+		// SELECT articles.id, articles.stock, fournisseurs.id, fournisseurs.prix_achat FROM articles, fournisseurs WHERE articles.id=fournisseurs.id_article HISTORY BETWEEN t1, t2
 
-	} else {
-		// NO JOIN CLAUSE
-		// get tablename
-		tableName := strings.TrimSpace(okQuery[fromIndex+4 : whereIndex])
+	} else { // --> NO JOIN CLAUSE
+		// get tables number
+		tables := strings.Split(okQuery[fromIndex+4:whereIndex], ",")
+		for i := range tables {
+			tables[i] = strings.Trim(tables[i], " ")
+		}
+		// if WHERE clause with plural tables
+		if len(tables) > 1 {
+			if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
+				dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
 
-		// get id
-		idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:historyIndex]), "=")
-		itemId := strings.Trim(idParams[1], " ")
-
-		// get columns
-		//columns := strings.Trim(okQuery[6:fromIndex], " ")
-		//columns = columns + ", timestamp"
-
-		/*
-			// ----------------------- to comment --------------------------------
-			// get select value(s)
-			var selectParams []string
-			if strings.Contains(okQuery[initIndex:fromIndex], "*") {
-				selectParams[0] = "*"
-			} else {
-				selectParams = strings.Split(strings.TrimSpace(okQuery[initIndex:fromIndex]), ",")
-				for i := range selectParams {
-					selectParams[i] = strings.Trim(selectParams[i], " '")
+				for i := range dates {
+					dates[i] = strings.Trim(dates[i], " ")
 				}
+
+				query := okQuery[:historyIndex]
+
+				for t := range tables {
+					query = query + "AND '" + dates[0] + "' <= " + tables[t] + ".timestamp AND " + tables[t] + ".timestamp <= '" + dates[1] + "'"
+				}
+
+				handler.ActivateSniffing()
+				executeQuery(query)
+
+			} else {
+				os.Exit(3)
+				// todo
 			}
-			// -------------------------------------------------------------------
-		*/
-
-		// get type --> between or not?
-		if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
-			// SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2
-			// SELECT articles.ref, articles.nom, fournisseurs.prenom FROM articles, fournisseurs WHERE articles.id = fournisseurs.id_article HISTORY BETWEEN t1, t2
-
-			// get dates
-			dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
-			for i := range dates {
-				dates[i] = strings.Trim(dates[i], " ")
-				//fmt.Println("columns:", dates[i])
-			}
-
-			query := okQuery[:historyIndex] + "AND '" + dates[0] + "' <= timestamp AND timestamp <= '" + dates[1] + "' ORDER BY timestamp"
-
-			handler.ActivateSniffing()
-			executeQuery(query)
 
 		} else {
-			// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
-			// sql = "SELECT articles.ref, articles.nom, fournisseurs.prenom FROM articles, fournisseurs WHERE articles.id = fournisseurs.id_article HISTORY t1" // join
+			// get tablename
+			tableName := strings.TrimSpace(okQuery[fromIndex+4 : whereIndex])
 
-			var date string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
-			query := okQuery[:fromIndex] + okQuery[fromIndex:historyIndex] + "AND timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp < '" + date + "')"
+			// get id
+			idParams := strings.Split(strings.TrimSpace(okQuery[whereIndex+5:historyIndex]), "=")
+			itemId := strings.Trim(idParams[1], " ")
 
-			handler.ActivateSniffing()
-			executeQuery(query)
+			// get columns
+			//columns := strings.Trim(okQuery[6:fromIndex], " ")
+			//columns = columns + ", timestamp"
+
+			/*
+				// ----------------------- to comment --------------------------------
+				// get select value(s)
+				var selectParams []string
+				if strings.Contains(okQuery[initIndex:fromIndex], "*") {
+					selectParams[0] = "*"
+				} else {
+					selectParams = strings.Split(strings.TrimSpace(okQuery[initIndex:fromIndex]), ",")
+					for i := range selectParams {
+						selectParams[i] = strings.Trim(selectParams[i], " '")
+					}
+				}
+				// -------------------------------------------------------------------
+			*/
+
+			// get type --> between or not?
+			if strings.Contains(okQuery[historyIndex+7:len(okQuery)], "BETWEEN") {
+				// SELECT * FROM MyGuests WHERE id=45 HISTORY BETWEEN t1, t2
+				// SELECT articles.ref, articles.nom, fournisseurs.prenom FROM articles, fournisseurs WHERE articles.id = fournisseurs.id_article HISTORY BETWEEN t1, t2
+
+				// get dates
+				dates := strings.Split(strings.TrimSpace(okQuery[historyIndex+15:len(okQuery)]), ",")
+				for i := range dates {
+					dates[i] = strings.Trim(dates[i], " ")
+					//fmt.Println("columns:", dates[i])
+				}
+
+				query := okQuery[:historyIndex] + "AND '" + dates[0] + "' <= timestamp AND timestamp <= '" + dates[1] + "' ORDER BY timestamp"
+
+				handler.ActivateSniffing()
+				executeQuery(query)
+
+			} else {
+				// sql = "SELECT * FROM MyGuests WHERE id=45 HISTORY 2009-10-20"
+				// sql = "SELECT articles.ref, articles.nom, fournisseurs.prenom FROM articles, fournisseurs WHERE articles.id = fournisseurs.id_article HISTORY t1" // join
+
+				var date string = strings.TrimSpace(okQuery[historyIndex+7 : len(okQuery)])
+				query := okQuery[:fromIndex] + okQuery[fromIndex:historyIndex] + "AND timestamp IN (SELECT MAX(timestamp) FROM " + tableName + " WHERE id = " + itemId + " AND timestamp < '" + date + "')"
+
+				handler.ActivateSniffing()
+				executeQuery(query)
+			}
 		}
 	}
 }
