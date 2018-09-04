@@ -206,13 +206,9 @@ func GetTablesStructure(tables []string) []Table {
 
 			var row []string
 			for i := range values {
-				if columns[i] == "Field" || columns[i] == "Type" || columns[i] == "Null" || columns[i] == "Default" {
+				if columns[i] == "Field" || columns[i] == "Type" {
 					value := string(values[i])
-					if value == "" {
-						row = append(row, "null")
-					} else {
-						row = append(row, value)
-					}
+					row = append(row, value)
 				}
 			}
 			tableArguments = append(tableArguments, row)
@@ -261,29 +257,12 @@ func CreateHistoryDb(db_dump []Table) {
 					// main attributes
 					query = query + " " + vals
 					break
-					/*
-						case 2:
-							// NULL
-							if vals == "NO" {
-								query = query + " NOT NULL"
-							}
-							if vals == "YES" {
-								query = query + " NULL"
-							}
-							break
-						case 3:
-							// DEFAULT
-							if vals != "null" {
-								query = query + " DEFAULT '" + vals + "'"
-							}
-							break
-					*/
-
 				}
 			}
 			query = query + ", "
 		}
 		query = query + "timestamp DATETIME) engine=columnstore"
+
 		// timestamp
 		_, err = db_mcs.Exec(query)
 		if err != nil {
