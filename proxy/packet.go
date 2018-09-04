@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	handler "../handler"
 )
@@ -82,7 +83,9 @@ func ProxyPacket(src, dst net.Conn, mode string) error {
 			IsMutexLocked = true
 
 			channel := make(chan struct{})
-			go PerformInsertQuery(query, channel)
+			timestamp := time.Now().Format("2006-01-02 15:04:05")
+
+			go PerformInsertQuery(query, channel, timestamp)
 			// waiting channel returns a value from thread 'PerformInsertQuery', kinda a sync or await_c#
 			// closing channel is happening into 'PerformInsertQuery' method
 			<-channel
@@ -121,8 +124,8 @@ func ProxyPacket(src, dst net.Conn, mode string) error {
 
 // ReadPacket reads data form conn, returns a ready packet
 func ReadPacket(conn net.Conn) ([]byte, error) {
-	header := []byte{0, 0, 0, 0}
 
+	header := []byte{0, 0, 0, 0}
 	if _, err := io.ReadFull(conn, header); err == io.EOF {
 		return nil, io.ErrUnexpectedEOF
 	} else if err != nil {
