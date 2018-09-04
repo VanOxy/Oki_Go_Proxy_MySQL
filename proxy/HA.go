@@ -13,9 +13,9 @@ import (
 
 // database name in columnStore
 //var dbName string = "okidb"
-var dbName string = "pure"
+var dbName string = "one"
 
-func PerformInsertQuery(query string, channel chan struct{}) {
+func PerformInsertQuery(query string, channel chan struct{}, timestamp string) {
 
 	// sql = "INSERT INTO persons (name, age) VALUES('type1', 15)"
 
@@ -65,8 +65,10 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 		break
 	case nil:
 		break
-	default:
-		panic(err.Error())
+	}
+
+	if itemId == 0 {
+		itemId = 1
 	}
 
 	// close channel to deblock initial thread, because now it can writte into main DB
@@ -92,7 +94,7 @@ func PerformInsertQuery(query string, channel chan struct{}) {
 			values = values + " ?,"
 		}
 	}
-	arguments = append(arguments, time.Now().Format("2006-01-02 15:04:05"))
+	arguments = append(arguments, timestamp)
 
 	// connect HA
 	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+handler.GetDbName())
