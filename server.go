@@ -14,20 +14,24 @@ import (
 )
 
 /*
-SHA1( password ) XOR SHA1( "20-bytes random data from server" <concat> SHA1( SHA1( password ) ) )
+	SHA1( password ) XOR SHA1( "20-bytes random data from server" <concat> SHA1( SHA1( password ) ) )
 */
+
+type Table struct {
+	tableName string
+	Params    [][]string
+}
+
 const (
-	MYSQL   = "192.168.1.115:3306" // MaxScale
-	PROXY   = "192.168.1.100:3306" // THIS SERVER
-	DB_NAME = "pure"
+	MYSQL       = "192.168.1.115:3306" // MaxScale
+	PROXY       = "192.168.1.100:3306" // THIS SERVER
+	ColumnStore = "192.168.1.121:3306"
+	DB_NAME     = "pure"
 )
 
 func main() {
-	handler.SetDbName(DB_NAME)
-	handler.SetInitState(true)
 
-	// Create history database if not exist
-	//Initialisation()
+	Initialisation()
 
 	// listen to port
 	listener, err := net.Listen("tcp", PROXY)
@@ -104,66 +108,36 @@ func Initialisation() {
 	// to not sniff packets during initialisation
 	handler.SetInitState(false)
 
+	// set dbName
+	handler.SetDbName(DB_NAME)
+
 	tables := GetTablesFromRelationalDatabase()
-	fmt.Println(tables)
-	os.Exit(3)
-	db_dump := GetDbStructure(tables)
+	db_dump := GetTablesStructure(tables)
 	CreateHistoryDb(db_dump)
-
-	// *** CREATE DB & TABLES INTO ColumnStore ***
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/")
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db_mcs.Close()
-
-	_, err = db_mcs.Exec("CREATE DATABASE IF NOT EXISTS " + DB_NAME)
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = db_mcs.Exec("USE okidb")
-	if err != nil {
-		panic(err)
-	}
-
-	// create tables
-	for i := range tables {
-		query := "CREATE TABLE IF NOT EXISTS " + tables[i] + " (id INT, column_name VARCHAR(30), value VARCHAR(50), timestamp DATETIME) engine=columnstore"
-		// id INT NOT NULL COMMENT 'autoincrement=1',
-		_, err = db_mcs.Exec(query)
-		if err != nil {
-			panic(err)
-		}
-	}
 
 	handler.SetInitState(true)
 }
 
 // *** RETURNS TABLES FROM RELATIONAL DB ***
 func GetTablesFromRelationalDatabase() []string {
-	// connect to maxScale
-	db_mxsc, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+DB_NAME)
+	// connect to MaxScale
+	db_mxsc, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/")
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db_mxsc.Close()
 
 	// query
-	res, err := db_mxsc.Query("SHOW TABLES FROM " + DB_NAME)
+	res, err := db_mxsc.Query("show tables from " + handler.GetDbName())
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// Get column names
 	columns, err := res.Columns()
 	if err != nil {
 		panic(err.Error())
 	}
-
-	// Make a slice for the values
 	values := make([]sql.RawBytes, len(columns))
-
 	scanArgs := make([]interface{}, len(values))
 	for i := range values {
 		scanArgs[i] = &values[i]
@@ -174,22 +148,14 @@ func GetTablesFromRelationalDatabase() []string {
 
 	// Fetch res
 	for res.Next() {
-		// get RawBytes from data
 		err = res.Scan(scanArgs...)
 		if err != nil {
 			panic(err.Error())
 		}
-		// Now do something with the data.
-		// Here we just print each column as a string.
 		var value string
 		for i := range values {
-			// Here we can check if the value is nil (NULL value)
-			if values[i] == nil {
-				value = "NULL"
-			} else {
-				value = string(values[i])
-				tables = append(tables, value)
-			}
+			value = string(values[i])
+			tables = append(tables, value)
 		}
 	}
 	if err = res.Err(); err != nil {
@@ -199,11 +165,11 @@ func GetTablesFromRelationalDatabase() []string {
 	return tables
 }
 
-func GetDbStructure(tables []string) [][]string {
+func GetTablesStructure(tables []string) []Table {
 
-	structure := make([][]string, len(tables))
+	var structures []Table
 
-	db_mxsc, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+DB_NAME)
+	db_mxsc, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+handler.GetDbName())
 	if err != nil {
 		panic(err.Error())
 	}
@@ -211,7 +177,7 @@ func GetDbStructure(tables []string) [][]string {
 
 	for _, tableName := range tables {
 
-		// query
+		// querr
 		res, err := db_mxsc.Query("SHOW COLUMNS FROM " + tableName)
 		if err != nil {
 			panic(err.Error())
@@ -222,47 +188,108 @@ func GetDbStructure(tables []string) [][]string {
 		if err != nil {
 			panic(err.Error())
 		}
-
 		// Make a slice for the values
 		values := make([]sql.RawBytes, len(columns))
-
 		scanArgs := make([]interface{}, len(values))
 		for i := range values {
 			scanArgs[i] = &values[i]
 		}
 
+		tableArguments := [][]string{}
+
 		// Fetch res
 		for res.Next() {
-			// get RawBytes from data
 			err = res.Scan(scanArgs...)
 			if err != nil {
 				panic(err.Error())
 			}
-			// Now do something with the data.
-			// Here we just print each column as a string.
-			var value string
+
+			var row []string
 			for i := range values {
-				// Here we can check if the value is nil (NULL value)
-				if values[i] == nil {
-					value = "NULL"
-				} else {
-					value = string(values[i])
-					tables = append(tables, value)
+				if columns[i] == "Field" || columns[i] == "Type" || columns[i] == "Null" || columns[i] == "Default" {
+					value := string(values[i])
+					if value == "" {
+						row = append(row, "null")
+					} else {
+						row = append(row, value)
+					}
 				}
 			}
+			tableArguments = append(tableArguments, row)
 		}
+		structures = append(structures, Table{tableName, tableArguments})
 
 		if err = res.Err(); err != nil {
 			panic(err.Error()) // proper error handling instead of panic in your app
 		}
-
 	}
-
-	return structure
+	return structures
 }
 
-func CreateHistoryDb(db_dump [][]string) {
+// *** CREATE DB & TABLES INTO ColumnStore ***
+func CreateHistoryDb(db_dump []Table) {
+	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp("+ColumnStore+")/")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db_mcs.Close()
 
+	_, err = db_mcs.Exec("CREATE DATABASE IF NOT EXISTS " + handler.GetDbName())
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = db_mcs.Exec("USE " + handler.GetDbName())
+	if err != nil {
+		panic(err)
+	}
+
+	for _, table := range db_dump {
+
+		tableName := table.tableName
+		// create tables
+		query := "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+
+		for _, tableParam := range table.Params { // récuperer la ligne
+			for i, vals := range tableParam { // récuperer la colonne et ces attributs
+				switch i {
+				case 0:
+					// column name
+					query = query + vals
+					break
+				case 1:
+					// main attributes
+					query = query + " " + vals
+					break
+					/*
+						case 2:
+							// NULL
+							if vals == "NO" {
+								query = query + " NOT NULL"
+							}
+							if vals == "YES" {
+								query = query + " NULL"
+							}
+							break
+						case 3:
+							// DEFAULT
+							if vals != "null" {
+								query = query + " DEFAULT '" + vals + "'"
+							}
+							break
+					*/
+
+				}
+			}
+			query = query + ", "
+		}
+		query = query + "timestamp DATETIME) engine=columnstore"
+		// timestamp
+		_, err = db_mcs.Exec(query)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func testSomeFeatures() {
