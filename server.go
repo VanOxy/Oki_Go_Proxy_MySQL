@@ -23,15 +23,21 @@ type Table struct {
 }
 
 const (
-	MYSQL       = "192.168.1.115:3306" // MaxScale
 	PROXY       = "192.168.1.100:3306" // THIS SERVER
+	MYSQL       = "192.168.1.115:3306" // MaxScale --> relationnal db
 	ColumnStore = "192.168.1.121:3306"
-	DB_NAME     = "pure"
+	DB_NAME     = "one"
 )
 
 func main() {
 
-	Initialisation()
+	// set dbName
+	handler.SetDbName(DB_NAME)
+	handler.SetInitState(true)
+	handler.SetMaxScaleConn()
+	handler.SetColumnStoreConn()
+
+	//Initialisation()
 
 	// listen to port
 	listener, err := net.Listen("tcp", PROXY)
@@ -78,7 +84,6 @@ func handleConnection(conn net.Conn) {
 
 	// copy traffic form conn_client to mysql_server
 	appToMysql(conn, mysql)
-
 }
 
 func appToMysql(client, mysql net.Conn) {
@@ -87,6 +92,8 @@ func appToMysql(client, mysql net.Conn) {
 		if err != nil {
 			fmt.Println("mysql : " + err.Error())
 			// may be close it here, or may be otherwise
+			mysql.Close()
+			//client.Close()
 			break
 		}
 	}
@@ -97,6 +104,8 @@ func MysqlToApp(mysql, client net.Conn) {
 		err := dbms.ProxyPacket(mysql, client, "client")
 		if err != nil {
 			fmt.Println("client : " + err.Error())
+			mysql.Close()
+			client.Close()
 			break
 		}
 	}

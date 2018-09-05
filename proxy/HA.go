@@ -3,6 +3,7 @@ package proxy
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -12,11 +13,9 @@ import (
 )
 
 // database name in columnStore
-//var dbName string = "okidb"
 var dbName string = "one"
 
 func PerformInsertQuery(query string, channel chan struct{}, timestamp string) {
-
 	// sql = "INSERT INTO persons (name, age) VALUES('type1', 15)"
 
 	// get query slice
@@ -47,34 +46,32 @@ func PerformInsertQuery(query string, channel chan struct{}, timestamp string) {
 
 	// **************** get id of inserted item ****************
 	// *********************************************************
+	var lastInsertedId int
 
-	// connect relative DB to get the last id inserted
-	db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+handler.GetDbName()) // you can precise port adress:3307 for Maxscale using columnStore cluster
+	/*
+		// connect relative DB to get the last id inserted
+		db, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.115)/"+handler.GetDbName()) // you can precise port adress:3307 for Maxscale using columnStore cluster
+		if err != nil {
+			panic(err.Error())
+		}
+	*/
+	db_mxl := handler.GetMaxScaleConn()
+	db := *db_mxl
+	//defer db.Close()
+
+	err := db.QueryRow("SELECT MAX(id)+1 FROM " + tableName).Scan(&lastInsertedId)
 	if err != nil {
-		panic(err.Error())
+		log.Fatal(err)
 	}
 
-	// declare id variable
-	var itemId int
-
-	// get id of inserted item
-	row := db.QueryRow("SELECT MAX(id)+1 FROM " + tableName)
-	switch err := row.Scan(&itemId); err {
-	case sql.ErrNoRows:
-		fmt.Println("No rows were returned!")
-		break
-	case nil:
-		break
-	}
-
-	if itemId == 0 {
-		itemId = 1
+	if lastInsertedId == 0 {
+		lastInsertedId = 1
 	}
 
 	// close channel to deblock initial thread, because now it can writte into main DB
 	close(channel)
 	// close db conection
-	db.Close()
+	//db.Close()
 
 	// ***************************************
 	// ***************************************
@@ -83,7 +80,7 @@ func PerformInsertQuery(query string, channel chan struct{}, timestamp string) {
 	// ***************************************
 
 	// create query
-	arguments := []interface{}{itemId}
+	arguments := []interface{}{lastInsertedId}
 	values := "(?,"
 	for i := 0; i < len(params); i++ {
 		arguments = append(arguments, params[i])
@@ -94,28 +91,52 @@ func PerformInsertQuery(query string, channel chan struct{}, timestamp string) {
 			values = values + " ?,"
 		}
 	}
+
 	arguments = append(arguments, timestamp)
+	qr := "INSERT INTO " + tableName + " VALUES " + values
 
 	// connect HA
-	db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+handler.GetDbName())
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db_mcs.Close()
+	/*
+		db_mcs, err := sql.Open("mysql", "okulich:22048o@tcp(192.168.1.121)/"+handler.GetDbName())
+		if err != nil {
+			panic(err.Error())
+		}
+		db.SetConnMaxLifetime(time.Second * 2)
+		db.SetMaxOpenConns(1)
+	*/
+	mcs := handler.GetColumnStoreConn()
+	db_mcs := *mcs
+	//defer db_mcs.Close()
 
-	qr := "INSERT INTO " + tableName + " VALUES " + values
+	/*
+		// execute query
+		stmtIns, err := db_mcs.Prepare(qr)
+		if err != nil {
+			panic(err.Error())
+		}
+		defer stmtIns.Close()
+
+		_, err = stmtIns.Exec(arguments)
+		if err != nil {
+			panic(err.Error())
+		}
+	*/
 
 	/*
 		fmt.Println(qr)
 		fmt.Println(arguments)
-		os.Exit(3)
 	*/
+
+	//qr := "INSERT INTO " + tableName + " VALUES " + values
 
 	// executer la requette
 	_, errex := db_mcs.Exec(qr, arguments...)
 	if errex != nil {
 		panic(errex.Error())
 	}
+
+	// connection close
+	//db_mcs.Close()
 	// ***************************************
 	// ***************************************
 }
